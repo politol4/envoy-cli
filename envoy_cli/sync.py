@@ -1,63 +1,66 @@
-"""High-level sync operations: push/pull env profiles using Vault + RemoteClient."""
+"""Sync manager: push/pull .env variables between local vault and remote."""
 
-from pathlib import Path
+import os
+from typing import Optional
 
 from envoy_cli.vault import Vault
-from envoy_cli.remote import RemoteClient, RemoteError
-from envoy_cli.env_file import load_file, save_file
+from envoy_cli.remote import RemoteClient
+from envoy_cli.diff import compute_diff, DiffResult
 
 
 class SyncManager:
-    """Orchestrates push/pull between a local Vault and a RemoteClient."""
+    """Coordinates push/pull operations between a local Vault and a RemoteClient."""
 
-    def __init__(self, client: RemoteClient, vault_dir: str = "."):
+    def __init__(
+        self,
+        vault_dir: str,
+        client: RemoteClient,
+        passphrase: str,
+        environment: str = "production",
+    ) -> None:
+        self.vault_dir = vault_dir
         self.client = client
-        self.vault_dir = Path(vault_dir)
+        self.passphrase = passphrase
+        self.environment = environment
 
-    def _vault_path(self, profile: str) -> str:
-        return str(self.vault_dir / f".envoy.{profile}.vault")
+    def _vault_path(self) -> str:
+        return os.path.join(self.vault_dir, f"{self.environment}.vault")
 
-    # ------------------------------------------------------------------
-    # Push
-    # ------------------------------------------------------------------
-
-    def push(self, profile: str, passphrase: str) -> None:
-        """Encrypt the local vault for *profile* and push it to the remote."""
-        vault = Vault(self._vault_path(profile), passphrase)
+    def _load_vault(self) -> Vault:
+        vault = Vault(self._vault_path(), self.passphrase)
         vault.load()
+        return vault
+
+    def push(self) -> None:
+        """Encrypt local vault contents and upload to remote."""
+        vault = self._load_vault()
         ciphertext = vault.export_ciphertext()
-        self.client.push(profile, ciphertext)
+        if not ciphertext:
+            raise ValueError("Vault is empty or could not be serialized.")
+        self.client.push(self.environment, ciphertext)
 
-    # ------------------------------------------------------------------
-    # Pull
-    # ------------------------------------------------------------------
-
-    def pull(self, profile: str, passphrase: str) -> None:
-        """Pull the remote ciphertext for *profile* and store it locally."""
-        ciphertext = self.client.pull(profile)
-        vault = Vault(self._vault_path(profile), passphrase)
+    def pull(self) -> None:
+        """Download remote ciphertext and merge into local vault."""
+        ciphertext = self.client.pull(self.environment)
+        vault = Vault(self._vault_path(), self.passphrase)
         vault.import_ciphertext(ciphertext)
         vault.save()
 
-    # ------------------------------------------------------------------
-    # Apply
-    # ------------------------------------------------------------------
+    def diff(self, mask_values: bool = True) -> DiffResult:
+        """Return a DiffResult comparing local vault to remote state."""
+        local_vault = self._load_vault()
+        local_vars = dict(local_vault.all())
 
-    def apply(self, profile: str, passphrase: str, env_path: str = ".env") -> None:
-        """Decrypt the local vault for *profile* and write a plain .env file."""
-        vault = Vault(self._vault_path(profile), passphrase)
-        vault.load()
-        save_file(env_path, vault.all())
+        ciphertext = self.client.pull(self.environment)
+        remote_vault = Vault(self._vault_path() + ".tmp", self.passphrase)
+        remote_vault.import_ciphertext(ciphertext)
+        remote_vars = dict(remote_vault.all())
 
-    # ------------------------------------------------------------------
-    # Import from .env
-    # ------------------------------------------------------------------
+        return compute_diff(local_vars, remote_vars)
 
-    def import_env(self, profile: str, passphrase: str, env_path: str = ".env") -> None:
-        """Read a plain .env file and store its contents in the local vault."""
-        pairs = load_file(env_path)
-        vault = Vault(self._vault_path(profile), passphrase)
-        vault.load()
-        for key, value in pairs.items():
-            vault.set(key, value)
-        vault.save()
+    def status(self, mask_values: bool = True) -> str:
+        """Return a human-readable status string comparing local to remote."""
+        result = self.diff(mask_values=mask_values)
+        lines = [f"Environment: {self.environment}", result.summary()]
+        lines += result.as_lines(mask_values=mask_values)
+        return "\n".join(lines)
