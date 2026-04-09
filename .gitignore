@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+develop-eggs/
+*.log
+env/
+.eggs/
+.pytest_cache/
+build/
+.mypy_cache/
