@@ -45,8 +45,18 @@ class AuditLog:
     def _load_entries(self) -> List[dict]:
         if not os.path.exists(self.log_path):
             return []
+        entries = []
         with open(self.log_path, "r", encoding="utf-8") as fh:
-            return [json.loads(line) for line in fh if line.strip()]
+            for lineno, line in enumerate(fh, start=1):
+                if not line.strip():
+                    continue
+                try:
+                    entries.append(json.loads(line))
+                except json.JSONDecodeError as exc:
+                    raise ValueError(
+                        f"Malformed audit log entry at {self.log_path}:{lineno}: {exc}"
+                    ) from exc
+        return entries
 
     def record(self, action: str, key: str, environment: str, user: Optional[str] = None) -> AuditEntry:
         entry = AuditEntry(action=action, key=key, environment=environment, user=user)
