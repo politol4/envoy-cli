@@ -87,45 +87,42 @@ def run(argv=None):
 
         elif args.command == "list":
             keys = vault.keys()
-            if keys:
-                print("\n".join(sorted(keys)))
+            if not keys:
+                print("No keys stored in vault.")
             else:
-                print("(empty vault)")
+                for key in sorted(keys):
+                    print(key)
+
+        elif args.command == "export":
+            data = vault.all()
+            save_file(Path(args.output), data)
+            print(f"Exported {len(data)} variable(s) to {args.output}")
+
+        elif args.command == "import":
+            input_path = Path(args.input)
+            if not input_path.exists():
+                print(f"File not found: {args.input}", file=sys.stderr)
+                sys.exit(1)
+            data = load_file(input_path)
+            for key, value in data.items():
+                vault.set(key, value)
+            print(f"Imported {len(data)} variable(s) from {args.input}")
 
         elif args.command == "push":
             client = RemoteClient(args.url, args.token)
             manager = SyncManager(vault, client)
             manager.push(args.env)
-            print(f"Pushed to {args.env}")
+            print(f"Pushed vault to {args.url} (env: {args.env})")
 
         elif args.command == "pull":
             client = RemoteClient(args.url, args.token)
             manager = SyncManager(vault, client)
             manager.pull(args.env)
-            print(f"Pulled from {args.env}")
+            print(f"Pulled vault from {args.url} (env: {args.env})")
 
-        elif args.command == "export":
-            data = vault.all()
-            save_file(args.output, data)
-            print(f"Exported {len(data)} variable(s) to {args.output}")
-
-        elif args.command == "import":
-            data = load_file(args.input)
-            for k, v in data.items():
-                vault.set(k, v)
-            print(f"Imported {len(data)} variable(s) from {args.input}")
-
-    except RemoteError as exc:
-        print(f"Remote error: {exc}", file=sys.stderr)
+    except RemoteError as e:
+        print(f"Remote error: {e}", file=sys.stderr)
         sys.exit(1)
-    except FileNotFoundError as exc:
-        print(f"File not found: {exc}", file=sys.stderr)
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
-
-
-def main():
-    run()
-
-
-if __name__ == "__main__":
-    main()
