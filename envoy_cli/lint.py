@@ -12,6 +12,9 @@ _FORBIDDEN_PATTERNS = ("password", "secret", "token", "key", "apikey", "api_key"
 # Minimum recommended length for sensitive values
 _MIN_SECRET_LENGTH = 8
 
+# Values that are clearly placeholders and should not be used in production
+_PLACEHOLDER_VALUES = frozenset(("changeme", "todo", "fixme", "xxx", "placeholder"))
+
 
 class LintError(Exception):
     """Raised when the lint run itself fails (not for individual warnings)."""
@@ -47,6 +50,12 @@ class LintReport:
         return "\n".join(lines)
 
 
+def _is_sensitive_key(key: str) -> bool:
+    """Return True if *key* matches any known sensitive-field pattern."""
+    lower_key = key.lower()
+    return any(pat in lower_key for pat in _FORBIDDEN_PATTERNS)
+
+
 def lint_vault(vault: Vault) -> LintReport:
     """Inspect all secrets in *vault* and return a LintReport."""
     if not isinstance(vault, Vault):
@@ -66,13 +75,11 @@ def lint_vault(vault: Vault) -> LintReport:
             continue
 
         # Placeholder / default value
-        if value.strip().lower() in ("changeme", "todo", "fixme", "xxx", "placeholder"):
+        if value.strip().lower() in _PLACEHOLDER_VALUES:
             warnings.append(LintWarning(key=key, message="Value looks like a placeholder."))
 
         # Short value for sensitive key names
-        lower_key = key.lower()
-        is_sensitive = any(pat in lower_key for pat in _FORBIDDEN_PATTERNS)
-        if is_sensitive and len(value) < _MIN_SECRET_LENGTH:
+        if _is_sensitive_key(key) and len(value) < _MIN_SECRET_LENGTH:
             warnings.append(
                 LintWarning(
                     key=key,
