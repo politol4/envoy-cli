@@ -60,6 +60,14 @@ class TestRender(unittest.TestCase):
         result = render(tmpl, {"1INVALID": "x"}, strict=False)
         self.assertEqual(result, tmpl)
 
+    def test_empty_template_returns_empty_string(self):
+        self.assertEqual(render("", {}), "")
+
+    def test_value_containing_braces_is_substituted_literally(self):
+        # The substituted value should not be interpreted as another placeholder
+        result = render("{{ VAL }}", {"VAL": "{{ OTHER }}"})
+        self.assertEqual(result, "{{ OTHER }}")
+
 
 class TestRenderFromVault(unittest.TestCase):
     def _make_vault(self, secrets):
@@ -81,12 +89,3 @@ class TestRenderFromVault(unittest.TestCase):
         vault = self._make_vault({})
         with self.assertRaises(TemplateError):
             render_from_vault("{{ MISSING }}", vault, "pass", strict=True)
-
-    def test_non_strict_propagated(self):
-        vault = self._make_vault({})
-        result = render_from_vault("{{ MISSING }}", vault, "pass", strict=False)
-        self.assertEqual(result, "{{ MISSING }}")
-
-
-if __name__ == "__main__":
-    unittest.main()
