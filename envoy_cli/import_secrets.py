@@ -82,6 +82,12 @@ def import_from_file(
     p = Path(path)
     if not p.exists():
         raise ImportError(f"File not found: {path}")
+    if not p.is_file():
+        raise ImportError(f"Path is not a file: {path}")
     if fmt is None:
         fmt = "json" if p.suffix.lower() == ".json" else "dotenv"
-    return import_secrets(p.read_text(encoding="utf-8"), fmt=fmt, **kwargs)
+    try:
+        text = p.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise ImportError(f"Could not read file '{path}': {exc}") from exc
+    return import_secrets(text, fmt=fmt, **kwargs)
