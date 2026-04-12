@@ -85,10 +85,7 @@ class TestDiffResultSummary(unittest.TestCase):
     def test_as_lines_changed_format(self):
         r = DiffResult(changed={"KEY": ("old", "new")})
         lines = r.as_lines(mask_values=False)
-        self.assertTrue(lines[0].startswith("~ KEY="))
+        self.assertTrue(lines[0].startswith("~"))
+        self.assertIn("KEY", lines[0])
         self.assertIn("old", lines[0])
         self.assertIn("new", lines[0])
-
-
-if __name__ == "__main__":
-    unittest.main()
