@@ -37,13 +37,16 @@ def batch_set(
     if not pairs:
         raise BatchError("pairs must not be empty")
 
+    # Validate all keys up front before touching the vault
+    invalid_keys = [k for k in pairs if not k]
+    if invalid_keys:
+        raise BatchError("key must not be empty")
+
     vault = manager._load_vault(env, passphrase)
     applied: List[str] = []
     skipped: List[str] = []
 
     for key, value in pairs.items():
-        if not key:
-            raise BatchError("key must not be empty")
         if not overwrite and vault.get(key) is not None:
             skipped.append(key)
             continue
@@ -77,16 +80,21 @@ def batch_delete(
     if not keys:
         raise BatchError("keys must not be empty")
 
+    # When not ignoring missing keys, validate all exist before modifying the vault
     vault = manager._load_vault(env, passphrase)
+
+    if not ignore_missing:
+        missing_up_front = [k for k in keys if vault.get(k) is None]
+        if missing_up_front:
+            raise BatchError(f"key not found: {missing_up_front[0]}")
+
     deleted: List[str] = []
     missing: List[str] = []
 
     for key in keys:
         if vault.get(key) is None:
-            if ignore_missing:
-                missing.append(key)
-                continue
-            raise BatchError(f"key not found: {key}")
+            missing.append(key)
+            continue
         vault.delete(key)
         deleted.append(key)
 
