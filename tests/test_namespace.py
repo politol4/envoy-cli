@@ -85,6 +85,12 @@ class TestMoveNamespace:
         result = move_namespace(secrets, "DB", "PG")
         assert "APP.KEY" in result
 
+    def test_values_preserved_after_move(self):
+        secrets = {"DB.HOST": "localhost", "DB.PORT": "5432"}
+        result = move_namespace(secrets, "DB", "PG")
+        assert result["PG.HOST"] == "localhost"
+        assert result["PG.PORT"] == "5432"
+
     def test_same_namespace_raises(self):
         with pytest.raises(NamespaceError):
             move_namespace({"DB.HOST": "x"}, "DB", "DB")
@@ -92,3 +98,7 @@ class TestMoveNamespace:
     def test_empty_source_namespace_raises(self):
         with pytest.raises(NamespaceError):
             move_namespace({}, "", "PG")
+
+    def test_empty_destination_namespace_raises(self):
+        with pytest.raises(NamespaceError):
+            move_namespace({"DB.HOST": "x"}, "DB", "")
