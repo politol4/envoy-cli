@@ -33,6 +33,7 @@ class TestCmdCompare(unittest.TestCase):
         )
 
     def _make_vault(self, secrets: dict) -> MagicMock:
+        """Create a mock vault whose list() returns (key, value) pairs."""
         v = MagicMock()
         v.list.return_value = list(secrets.items())
         return v
@@ -73,6 +74,22 @@ class TestCmdCompare(unittest.TestCase):
             result = cmd_compare(_make_args(env_a="dev", env_b="prod"))
         self.assertIn("dev", result)
         self.assertIn("prod", result)
+
+    def test_missing_key_in_env_b_appears_in_output(self):
+        """A key present only in env_a should be flagged in the comparison output."""
+        va = self._make_vault({"ONLY_IN_A": "value", "SHARED": "same"})
+        vb = self._make_vault({"SHARED": "same"})
+        with self._patch_load(va, vb):
+            result = cmd_compare(_make_args())
+        self.assertIn("ONLY_IN_A", result)
+
+    def test_missing_key_in_env_a_appears_in_output(self):
+        """A key present only in env_b should be flagged in the comparison output."""
+        va = self._make_vault({"SHARED": "same"})
+        vb = self._make_vault({"ONLY_IN_B": "value", "SHARED": "same"})
+        with self._patch_load(va, vb):
+            result = cmd_compare(_make_args())
+        self.assertIn("ONLY_IN_B", result)
 
 
 if __name__ == "__main__":
