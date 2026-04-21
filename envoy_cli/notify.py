@@ -38,6 +38,9 @@ class NotifyConfig:
         )
 
 
+SUPPORTED_CHANNELS = frozenset({"slack", "email", "log"})
+
+
 def _matches_event(config: NotifyConfig, event: str) -> bool:
     """Return True if this config should fire for *event*."""
     return config.enabled and (not config.events or event in config.events)
@@ -47,6 +50,20 @@ def _dispatch_log(config: NotifyConfig, payload: dict) -> None:
     """Append a JSON line to a log file."""
     with open(config.target, "a", encoding="utf-8") as fh:
         fh.write(json.dumps(payload) + "\n")
+
+
+def _validate_configs(configs: List[NotifyConfig]) -> None:
+    """Raise NotifyError if any config contains an unsupported channel.
+
+    Validates all configs up-front so callers discover configuration mistakes
+    before any notifications are dispatched.
+    """
+    for cfg in configs:
+        if cfg.channel not in SUPPORTED_CHANNELS:
+            raise NotifyError(
+                f"Unknown channel '{cfg.channel}'; "
+                f"supported channels are: {', '.join(sorted(SUPPORTED_CHANNELS))}"
+            )
 
 
 def dispatch_notification(
@@ -68,6 +85,8 @@ def dispatch_notification(
     if not env:
         raise NotifyError("env must not be empty")
 
+    _validate_configs(configs)
+
     payload = {"event": event, "env": env, **(details or {})}
     dispatched = 0
 
@@ -82,8 +101,6 @@ def dispatch_notification(
                     f"HTTP transport required for channel '{cfg.channel}'"
                 )
             _http_post(cfg.target, payload)
-        else:
-            raise NotifyError(f"Unknown channel: {cfg.channel}")
         dispatched += 1
 
     return dispatched
